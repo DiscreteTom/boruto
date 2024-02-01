@@ -100,8 +100,10 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
                 SetWindowPos(
                   w.hwnd,
                   HWND(0),
-                  offset.x,
-                  offset.y,
+                  // use relative offset
+                  offset.x + w.x,
+                  offset.y + w.y,
+                  // keep original size
                   lprect.right - lprect.left,
                   lprect.bottom - lprect.top,
                   SET_WINDOW_POS_FLAGS(0),
