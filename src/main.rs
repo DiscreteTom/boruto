@@ -150,14 +150,14 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                 }
                 if let Err(_) = SetWindowPos(
                   w.hwnd,
-                  HWND(0), // TODO: is this correct?
+                  None,
                   // use relative offset
                   offset.x + w.x,
                   offset.y + w.y,
                   // keep original size
                   rect.right - rect.left,
                   rect.bottom - rect.top,
-                  SET_WINDOW_POS_FLAGS(0), // TODO: is this correct?
+                  SET_WINDOW_POS_FLAGS(0),
                 ) {
                   eprintln!("Error setting window pos for pid({}), remove it", w.pid);
                   to_be_removed.push(w.pid);
