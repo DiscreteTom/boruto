@@ -3,7 +3,7 @@ mod protocol;
 use crate::protocol::Action;
 use futures_util::StreamExt;
 use serde_json;
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{
   accept_async,
@@ -124,8 +124,12 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-  let addr = "127.0.0.1:9002";
+  let addr = env::args()
+    .nth(1)
+    .unwrap_or_else(|| "127.0.0.1:9002".to_string());
   let listener = TcpListener::bind(&addr).await.expect("Can't listen");
+
+  println!("Listening on: {}", addr);
 
   while let Ok((stream, _)) = listener.accept().await {
     let peer = stream
