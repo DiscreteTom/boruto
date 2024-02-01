@@ -77,56 +77,69 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
 
   while let Some(msg) = ws_stream.next().await {
     let msg = msg?;
-    // if msg.is_text() || msg.is_binary() {
-    //   ws_stream.send(msg).await?;
-    // }
     match msg {
       Message::Text(text) => {
         let action: Action = serde_json::from_str(&text).unwrap();
         match action {
           Action::Start => unsafe {
             STARTED = true;
+            println!("Started");
           },
           Action::Stop => unsafe {
             STARTED = false;
+            println!("Stopped");
           },
           Action::Add(pid_payload) => unsafe {
             // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
-            EnumWindows(
+            match EnumWindows(
               Some(enum_windows_callback),
               LPARAM(pid_payload.pid as isize),
-            );
-            // TODO: handle error
+            ) {
+              Ok(_) => (),
+              Err(_) => eprintln!("Error enumerating windows for pid({})", pid_payload.pid),
+            }
           },
           Action::Remove(pid_payload) => unsafe {
             MANAGED_WINDOWS.retain(|w| w.pid != pid_payload.pid);
+            println!("Removed window for pid({})", pid_payload.pid);
           },
           Action::RemoveAll => unsafe {
             MANAGED_WINDOWS.clear();
+            println!("Removed all windows");
           },
           Action::Update(offset) => unsafe {
             if STARTED {
+              let mut to_be_removed = Vec::new();
               for w in &MANAGED_WINDOWS {
                 let mut rect = RECT::default();
-                GetWindowRect(w.hwnd, &mut rect);
-                SetWindowPos(
+                match GetWindowRect(w.hwnd, &mut rect) {
+                  Err(_) => {
+                    eprintln!("Error getting window rect for pid({}), remove it", w.pid);
+                    to_be_removed.push(w.pid);
+                    continue; // update next window
+                  }
+                  Ok(_) => (),
+                }
+                if let Err(_) = SetWindowPos(
                   w.hwnd,
-                  HWND(0),
+                  HWND(0), // TODO: is this correct?
                   // use relative offset
                   offset.x + w.x,
                   offset.y + w.y,
                   // keep original size
                   rect.right - rect.left,
                   rect.bottom - rect.top,
-                  SET_WINDOW_POS_FLAGS(0),
-                );
+                  SET_WINDOW_POS_FLAGS(0), // TODO: is this correct?
+                ) {
+                  eprintln!("Error setting window pos for pid({}), remove it", w.pid);
+                  to_be_removed.push(w.pid);
+                }
               }
             }
           },
-          // TODO
-          _ => (),
         }
       }
+      // other websocket message types are ignored
       _ => (),
     }
   }
