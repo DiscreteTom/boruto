@@ -1,9 +1,8 @@
 mod protocol;
 
+use crate::protocol::Action;
 use futures_util::StreamExt;
 use serde_json;
-// use log::*;
-use crate::protocol::Action;
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{
@@ -54,15 +53,12 @@ async fn accept_connection(peer: SocketAddr, stream: TcpStream) {
     match e {
       Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
       _ => eprintln!("Error processing connection: {}", e),
-      //   err => error!("Error processing connection: {}", err),
     }
   }
 }
 
 async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
   let mut ws_stream = accept_async(stream).await.expect("Failed to accept");
-
-  //   info!("New WebSocket connection: {}", peer);
 
   while let Some(msg) = ws_stream.next().await {
     let msg = msg?;
@@ -116,7 +112,6 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
           // TODO
           _ => (),
         }
-        // println!("Action: {:?}", action);
       }
       _ => (),
     }
@@ -127,17 +122,13 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-  //   env_logger::init();
-
   let addr = "127.0.0.1:9002";
   let listener = TcpListener::bind(&addr).await.expect("Can't listen");
-  //   info!("Listening on: {}", addr);
 
   while let Ok((stream, _)) = listener.accept().await {
     let peer = stream
       .peer_addr()
       .expect("connected streams should have a peer address");
-    // info!("Peer address: {}", peer);
 
     tokio::spawn(accept_connection(peer, stream));
   }
