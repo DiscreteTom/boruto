@@ -116,7 +116,15 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
               LPARAM(pid_payload.pid as isize),
             ) {
               Ok(_) => (),
-              Err(_) => eprintln!("Error enumerating windows for pid({})", pid_payload.pid),
+              Err(e) => {
+                // if the return code is 0, there is no error
+                if e.code().0 != 0 {
+                  eprintln!(
+                    "Error enumerating windows for pid({}): {:?}",
+                    pid_payload.pid, e
+                  )
+                }
+              }
             }
           },
           Action::Remove(pid_payload) => unsafe {
