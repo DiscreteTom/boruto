@@ -29,23 +29,36 @@ static mut STARTED: bool = false;
 
 // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
 extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
-  let mut pid = 0;
+  let pid = l_param.0 as u32; // the target pid
+  let mut hwnd_pid = 0; // pid for the hwnd
   unsafe {
-    GetWindowThreadProcessId(hwnd, Some(&mut pid));
+    // get pid by hwnd
+    GetWindowThreadProcessId(hwnd, Some(&mut hwnd_pid));
   }
-  if pid == (l_param.0 as u32) {
+  if hwnd_pid == pid {
     unsafe {
-      MANAGED_WINDOWS.push(WindowState {
-        hwnd,
-        x: 0,
-        y: 0,
-        pid,
-      });
-      println!("Found window: {:?}", hwnd);
+      let mut rect = RECT::default();
+      match GetWindowRect(hwnd, &mut rect) {
+        Ok(_) => {
+          let state = WindowState {
+            hwnd,
+            // record the initial position
+            x: rect.left,
+            y: rect.top,
+            pid,
+          };
+          println!("Added window: {:?}", state);
+          MANAGED_WINDOWS.push(state);
+        }
+        Err(_) => eprintln!(
+          "Error getting window rect for pid({}) and hwnd({})",
+          hwnd_pid, hwnd.0
+        ),
+      }
     }
     return BOOL(0); // return false to stop enumerating
   }
-  return BOOL(1);
+  return BOOL(1); // return true to continue enumerating
 }
 
 async fn accept_connection(peer: SocketAddr, stream: TcpStream) {
@@ -84,12 +97,6 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
               LPARAM(pid_payload.pid as isize),
             );
             // TODO: handle error
-            let mut rect = RECT::default();
-            let last = MANAGED_WINDOWS.last_mut().unwrap();
-            GetWindowRect(last.hwnd, &mut rect);
-            last.x = rect.left;
-            last.y = rect.top;
-            println!("Added window: {:?}", last);
           },
           Action::Remove(pid_payload) => unsafe {
             MANAGED_WINDOWS.retain(|w| w.pid != pid_payload.pid);
