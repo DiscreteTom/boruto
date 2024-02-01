@@ -24,6 +24,7 @@ struct WindowState {
 }
 
 static mut MANAGED_WINDOWS: Vec<WindowState> = Vec::new();
+static mut STARTED: bool = false;
 
 // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
 extern "system" fn callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
@@ -65,17 +66,25 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
       Message::Text(text) => {
         let action: Action = serde_json::from_str(&text).unwrap();
         match action {
+          Action::Start => unsafe {
+            STARTED = true;
+          },
+          Action::Stop => unsafe {
+            STARTED = false;
+          },
           Action::Update(offset) => unsafe {
-            // EnumWindows(Some(callback), 123);
-            SetWindowPos(
-              MANAGED_WINDOWS[0].hwnd,
-              HWND(0),
-              offset.x,
-              offset.y,
-              0,
-              0,
-              SET_WINDOW_POS_FLAGS(0),
-            );
+            if STARTED {
+              // EnumWindows(Some(callback), 123);
+              SetWindowPos(
+                MANAGED_WINDOWS[0].hwnd,
+                HWND(0),
+                offset.x,
+                offset.y,
+                0,
+                0,
+                SET_WINDOW_POS_FLAGS(0),
+              );
+            }
           },
           // TODO
           _ => (),
