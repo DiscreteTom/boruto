@@ -60,6 +60,8 @@ async fn accept_connection(peer: SocketAddr, stream: TcpStream) {
 async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
   let mut ws_stream = accept_async(stream).await.expect("Failed to accept");
 
+  println!("WebSocket Connected: {}", peer);
+
   while let Some(msg) = ws_stream.next().await {
     let msg = msg?;
     // if msg.is_text() || msg.is_binary() {
@@ -119,6 +121,7 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
     }
   }
 
+  println!("WebSocket Disconnected: {}", peer);
   Ok(())
 }
 
