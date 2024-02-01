@@ -28,7 +28,7 @@ static mut MANAGED_WINDOWS: Vec<WindowState> = Vec::new();
 static mut STARTED: bool = false;
 
 // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
-extern "system" fn callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
+extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
   let mut pid = 0;
   unsafe {
     GetWindowThreadProcessId(hwnd, Some(&mut pid));
@@ -79,7 +79,10 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
           },
           Action::Add(pid_payload) => unsafe {
             // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
-            EnumWindows(Some(callback), LPARAM(pid_payload.pid as isize));
+            EnumWindows(
+              Some(enum_windows_callback),
+              LPARAM(pid_payload.pid as isize),
+            );
             // TODO: handle error
             let mut rect = RECT::default();
             let last = MANAGED_WINDOWS.last_mut().unwrap();
