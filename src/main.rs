@@ -2,13 +2,18 @@ mod protocol;
 
 use crate::protocol::Action;
 use futures_util::StreamExt;
+use http_body_util::Full;
+use hyper::{
+  body::{Bytes, Incoming},
+  server::conn::http1,
+  Request, Response,
+};
+use hyper_tungstenite::HyperWebsocket;
+use hyper_util::rt::TokioIo;
 use serde_json;
 use std::{env, net::SocketAddr};
-use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::{
-  accept_async,
-  tungstenite::{Error, Message, Result},
-};
+use tokio::net::TcpListener;
+use tokio_tungstenite::tungstenite::{Error, Message, Result};
 use windows::Win32::{
   Foundation::{BOOL, HWND, LPARAM, RECT},
   UI::WindowsAndMessaging::{
@@ -61,21 +66,36 @@ extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
   return BOOL(1); // return true to continue enumerating
 }
 
-async fn accept_connection(peer: SocketAddr, stream: TcpStream) {
-  if let Err(e) = handle_connection(peer, stream).await {
-    match e {
-      Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
-      _ => eprintln!("Error processing connection: {}", e),
-    }
+/// Handle a HTTP or WebSocket request.
+async fn handle_request(
+  mut request: Request<Incoming>,
+  peer: SocketAddr,
+) -> Result<Response<Full<Bytes>>, Error> {
+  // Check if the request is a websocket upgrade request.
+  if hyper_tungstenite::is_upgrade_request(&request) {
+    let (response, websocket) = hyper_tungstenite::upgrade(&mut request, None)?;
+
+    // Spawn a task to handle the websocket connection.
+    tokio::spawn(async move {
+      if let Err(e) = serve_websocket(websocket, peer).await {
+        eprintln!("Error in websocket connection: {e}");
+      }
+    });
+
+    // Return the response so the spawned future can continue.
+    Ok(response)
+  } else {
+    // Handle regular HTTP requests here.
+    Ok(Response::new(Full::<Bytes>::from("Hello HTTP!")))
   }
 }
 
-async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
-  let mut ws_stream = accept_async(stream).await.expect("Failed to accept");
+async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
+  let mut ws = ws.await?;
 
   println!("WebSocket Connected: {}", peer);
 
-  while let Some(msg) = ws_stream.next().await {
+  while let Some(msg) = ws.next().await {
     let msg = msg?;
     match msg {
       Message::Text(text) => {
@@ -155,13 +175,24 @@ async fn main() {
     .unwrap_or_else(|| "127.0.0.1:9002".to_string());
   let listener = TcpListener::bind(&addr).await.expect("Can't listen");
 
+  let mut http = http1::Builder::new();
+  http.keep_alive(true);
+
   println!("Listening on: {}", addr);
 
-  while let Ok((stream, _)) = listener.accept().await {
-    let peer = stream
-      .peer_addr()
-      .expect("connected streams should have a peer address");
+  loop {
+    let (stream, peer) = listener.accept().await.expect("failed to accept");
+    let connection = http
+      .serve_connection(
+        TokioIo::new(stream),
+        hyper::service::service_fn(move |req| handle_request(req, peer)),
+      )
+      .with_upgrades();
 
-    tokio::spawn(accept_connection(peer, stream));
+    tokio::spawn(async move {
+      if let Err(err) = connection.await {
+        println!("Error serving HTTP connection: {err:?}");
+      }
+    });
   }
 }
