@@ -1,6 +1,6 @@
 mod protocol;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json;
 // use log::*;
 use crate::protocol::Action;
@@ -17,7 +17,13 @@ use windows::Win32::{
   },
 };
 
-static mut HWNDS: HWND = HWND(0);
+struct WindowState {
+  pub hwnd: HWND,
+  pub x: i32,
+  pub y: i32,
+}
+
+static mut MANAGED_WINDOWS: Vec<WindowState> = Vec::new();
 
 // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
 extern "system" fn callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
@@ -27,7 +33,7 @@ extern "system" fn callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
   }
   if process_id == (l_param.0 as u32) {
     unsafe {
-      HWNDS = hwnd;
+      MANAGED_WINDOWS.push(WindowState { hwnd, x: 0, y: 0 });
       println!("Found window: {:?}", hwnd);
     }
     return BOOL(0); // return false to stop enumerating
@@ -62,7 +68,7 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
           Action::Update(offset) => unsafe {
             // EnumWindows(Some(callback), 123);
             SetWindowPos(
-              HWNDS,
+              MANAGED_WINDOWS[0].hwnd,
               HWND(0),
               offset.x,
               offset.y,
@@ -71,6 +77,8 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
               SET_WINDOW_POS_FLAGS(0),
             );
           },
+          // TODO
+          _ => (),
         }
         // println!("Action: {:?}", action);
       }
