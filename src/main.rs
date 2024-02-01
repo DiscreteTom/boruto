@@ -79,11 +79,11 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
             // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
             EnumWindows(Some(callback), LPARAM(pid_payload.pid as isize));
             // TODO: handle error
-            let mut lprect = RECT::default();
+            let mut rect = RECT::default();
             let last = MANAGED_WINDOWS.last_mut().unwrap();
-            GetWindowRect(last.hwnd, &mut lprect);
-            last.x = lprect.left;
-            last.y = lprect.top;
+            GetWindowRect(last.hwnd, &mut rect);
+            last.x = rect.left;
+            last.y = rect.top;
             println!("Added window: {:?}", last);
           },
           Action::Remove(pid_payload) => unsafe {
@@ -95,8 +95,8 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
           Action::Update(offset) => unsafe {
             if STARTED {
               for w in &MANAGED_WINDOWS {
-                let mut lprect = RECT::default();
-                GetWindowRect(w.hwnd, &mut lprect);
+                let mut rect = RECT::default();
+                GetWindowRect(w.hwnd, &mut rect);
                 SetWindowPos(
                   w.hwnd,
                   HWND(0),
@@ -104,8 +104,8 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
                   offset.x + w.x,
                   offset.y + w.y,
                   // keep original size
-                  lprect.right - lprect.left,
-                  lprect.bottom - lprect.top,
+                  rect.right - rect.left,
+                  rect.bottom - rect.top,
                   SET_WINDOW_POS_FLAGS(0),
                 );
               }
