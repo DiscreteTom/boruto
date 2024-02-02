@@ -49,6 +49,11 @@ extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
       let mut rect = RECT::default();
       match GetWindowRect(hwnd, &mut rect) {
         Ok(_) => {
+          // ensure the window is not already managed
+          if MANAGED_WINDOWS.iter().any(|w| w.hwnd == hwnd) {
+            return BOOL(0); // return false to stop enumerating
+          }
+
           let state = WindowState {
             hwnd,
             // record the initial position
