@@ -149,8 +149,10 @@ let count = 0
 const rps = ref(0)
 function update() {
   console.log('update', x.value, y.value)
-  ws.value?.send(JSON.stringify({ type: 'update', x: Number(x.value), y: Number(y.value) }))
-  count++
+  if (ws.value?.bufferedAmount === 0) {
+    ws.value?.send(JSON.stringify({ type: 'update', x: Number(x.value), y: Number(y.value) }))
+    count++
+  }
 }
 
 setInterval(() => {
