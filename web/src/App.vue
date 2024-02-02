@@ -34,8 +34,8 @@
       <label>X: </label>
       <input
         type="range"
-        min="-500"
-        max="500"
+        :min="minX"
+        :max="maxX"
         v-model="x"
         @input="update"
         :disabled="ws === null || !started"
@@ -50,8 +50,8 @@
       <label>Y: </label>
       <input
         type="range"
-        min="-500"
-        max="500"
+        :min="minY"
+        :max="maxY"
         v-model="y"
         @input="update"
         :disabled="ws === null || !started"
