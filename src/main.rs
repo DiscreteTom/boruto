@@ -266,8 +266,8 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                 }
 
                 // remove the windows that failed to update
-                MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
                 if to_be_removed.len() > 0 {
+                  MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
                   if let Err(_) = reply(
                     &mut ws,
                     Reply::CurrentManagedPids(PidsPayload {
