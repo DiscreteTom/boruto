@@ -20,9 +20,7 @@ use tokio_tungstenite::{
 };
 use windows::Win32::{
   Foundation::{BOOL, HWND, LPARAM, RECT},
-  UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowRect, GetWindowThreadProcessId, SetWindowPos, SET_WINDOW_POS_FLAGS,
-  },
+  UI::WindowsAndMessaging::{EnumWindows, GetWindowRect, GetWindowThreadProcessId, MoveWindow},
 };
 
 #[derive(Debug)]
@@ -246,16 +244,15 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                     }
                     Ok(_) => (),
                   }
-                  if let Err(e) = SetWindowPos(
+                  if let Err(e) = MoveWindow(
                     w.hwnd,
-                    None,
                     // use relative offset
                     offset.x + w.x,
                     offset.y + w.y,
                     // keep original size
                     rect.right - rect.left,
                     rect.bottom - rect.top,
-                    SET_WINDOW_POS_FLAGS(0),
+                    false,
                   ) {
                     eprintln!(
                       "Error setting window pos for pid({}), remove it. Error: {e:?}",
