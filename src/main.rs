@@ -55,9 +55,9 @@ extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
           println!("Added window: {:?}", state);
           MANAGED_WINDOWS.push(state);
         }
-        Err(_) => eprintln!(
-          "Error getting window rect for pid({}) and hwnd({})",
-          hwnd_pid, hwnd.0
+        Err(e) => eprintln!(
+          "Error getting window rect for pid({hwnd_pid}) and hwnd({}): {e:?}",
+          hwnd.0
         ),
       }
     }
@@ -78,7 +78,7 @@ async fn handle_request(
     // Spawn a task to handle the websocket connection.
     tokio::spawn(async move {
       if let Err(e) = serve_websocket(websocket, peer).await {
-        eprintln!("Error in websocket connection: {e}");
+        eprintln!("Error in websocket connection: {e:?}");
       }
     });
 
@@ -93,7 +93,7 @@ async fn handle_request(
 async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
   let mut ws = ws.await?;
 
-  println!("WebSocket Connected: {}", peer);
+  println!("WebSocket Connected: {peer}");
 
   while let Some(msg) = ws.next().await {
     let msg = msg?;
@@ -120,8 +120,8 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                 // if the return code is 0, there is no error
                 if e.code().0 != 0 {
                   eprintln!(
-                    "Error enumerating windows for pid({}): {:?}",
-                    pid_payload.pid, e
+                    "Error enumerating windows for pid({}): {e:?}",
+                    pid_payload.pid
                   )
                 }
               }
@@ -141,14 +141,17 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
               for w in &MANAGED_WINDOWS {
                 let mut rect = RECT::default();
                 match GetWindowRect(w.hwnd, &mut rect) {
-                  Err(_) => {
-                    eprintln!("Error getting window rect for pid({}), remove it", w.pid);
+                  Err(e) => {
+                    eprintln!(
+                      "Error getting window rect for pid({}), remove it. Error: {e:?}",
+                      w.pid
+                    );
                     to_be_removed.push(w.pid);
                     continue; // update next window
                   }
                   Ok(_) => (),
                 }
-                if let Err(_) = SetWindowPos(
+                if let Err(e) = SetWindowPos(
                   w.hwnd,
                   None,
                   // use relative offset
@@ -159,7 +162,10 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                   rect.bottom - rect.top,
                   SET_WINDOW_POS_FLAGS(0),
                 ) {
-                  eprintln!("Error setting window pos for pid({}), remove it", w.pid);
+                  eprintln!(
+                    "Error setting window pos for pid({}), remove it. Error: {e:?}",
+                    w.pid
+                  );
                   to_be_removed.push(w.pid);
                 }
               }
@@ -189,7 +195,7 @@ async fn main() {
   let mut http = http1::Builder::new();
   http.keep_alive(true);
 
-  println!("Listening on: {}", addr);
+  println!("Listening on: {addr}");
 
   loop {
     let (stream, peer) = listener.accept().await.expect("failed to accept");
