@@ -163,6 +163,9 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
                   to_be_removed.push(w.pid);
                 }
               }
+
+              // remove the windows that failed to update
+              MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
             }
           },
         }
