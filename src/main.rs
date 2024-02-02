@@ -139,7 +139,7 @@ async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
   }
 
   unsafe {
-    if !init_failed && MANAGED_WINDOWS.len() > 0 {
+    if !init_failed {
       if let Err(_) = reply(
         &mut ws,
         Reply::CurrentManagedPids(PidsPayload {
