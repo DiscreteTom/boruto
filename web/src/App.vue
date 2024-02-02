@@ -27,6 +27,7 @@
         <button @click="toggle" :disabled="ws === null">
           {{ started ? 'Disable' : 'Enable' }}
         </button>
+        <label>RPS: {{ rps }}</label>
       </div>
       <label>Min X: </label>
       <input type="number" v-model="minX" placeholder="-500" :disabled="ws === null || !started" />
@@ -144,8 +145,16 @@ function removeAll() {
   ws.value?.send(JSON.stringify({ type: 'removeAll' }))
 }
 
+let count = 0
+const rps = ref(0)
 function update() {
   console.log('update', x.value, y.value)
   ws.value?.send(JSON.stringify({ type: 'update', x: Number(x.value), y: Number(y.value) }))
+  count++
 }
+
+setInterval(() => {
+  rps.value = count
+  count = 0
+}, 1000)
 </script>
