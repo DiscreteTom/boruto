@@ -1,11 +1,12 @@
 mod protocol;
 
-use crate::protocol::Action;
-use futures_util::StreamExt;
+use crate::protocol::{Action, PidsPayload, Reply};
+use futures_util::{SinkExt, StreamExt};
 use http_body_util::Full;
 use hyper::{
   body::{Bytes, Incoming},
   server::conn::http1,
+  upgrade::Upgraded,
   Request, Response,
 };
 use hyper_tungstenite::HyperWebsocket;
@@ -13,7 +14,10 @@ use hyper_util::rt::TokioIo;
 use serde_json;
 use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
-use tokio_tungstenite::tungstenite::{Error, Message, Result};
+use tokio_tungstenite::{
+  tungstenite::{Error, Message, Result},
+  WebSocketStream,
+};
 use windows::Win32::{
   Foundation::{BOOL, HWND, LPARAM, RECT},
   UI::WindowsAndMessaging::{
@@ -90,94 +94,193 @@ async fn handle_request(
   }
 }
 
+async fn reply(ws: &mut WebSocketStream<TokioIo<Upgraded>>, reply: Reply) -> Result<(), ()> {
+  match ws
+    .send(Message::Text(match serde_json::to_string(&reply) {
+      Ok(s) => s,
+      Err(e) => {
+        eprintln!("Error serializing reply: {e:?}");
+        return Err(());
+      }
+    }))
+    .await
+  {
+    Ok(_) => (),
+    Err(e) => {
+      eprintln!("Error sending reply: {e:?}");
+      return Err(());
+    }
+  }
+  Ok(())
+}
+
 async fn serve_websocket(ws: HyperWebsocket, peer: SocketAddr) -> Result<()> {
   let mut ws = ws.await?;
+  let mut init_failed = false;
 
   println!("WebSocket Connected: {peer}");
 
-  while let Some(msg) = ws.next().await {
-    let msg = msg?;
-    match msg {
-      Message::Text(text) => {
-        let action: Action = serde_json::from_str(&text).unwrap();
-        match action {
-          Action::Start => unsafe {
-            STARTED = true;
-            println!("Started");
-          },
-          Action::Stop => unsafe {
-            STARTED = false;
-            println!("Stopped");
-          },
-          Action::Add(pid_payload) => unsafe {
-            // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
-            match EnumWindows(
-              Some(enum_windows_callback),
-              LPARAM(pid_payload.pid as isize),
-            ) {
-              Ok(_) => (),
-              Err(e) => {
-                // if the return code is 0, there is no error
-                if e.code().0 != 0 {
-                  eprintln!(
-                    "Error enumerating windows for pid({}): {e:?}",
-                    pid_payload.pid
-                  )
+  if let Err(_) = reply(
+    &mut ws,
+    if unsafe { STARTED } {
+      Reply::Started
+    } else {
+      Reply::Stopped
+    },
+  )
+  .await
+  {
+    init_failed = true;
+  }
+
+  unsafe {
+    if !init_failed && MANAGED_WINDOWS.len() > 0 {
+      if let Err(_) = reply(
+        &mut ws,
+        Reply::CurrentManagedPids(PidsPayload {
+          pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+        }),
+      )
+      .await
+      {
+        init_failed = true;
+      }
+    }
+  }
+
+  if !init_failed {
+    while let Some(msg) = ws.next().await {
+      let msg = msg?;
+      match msg {
+        Message::Text(text) => {
+          let action: Action = serde_json::from_str(&text).unwrap();
+          match action {
+            Action::Start => unsafe {
+              STARTED = true;
+              println!("Started");
+              if let Err(_) = reply(&mut ws, Reply::Started).await {
+                break;
+              }
+            },
+            Action::Stop => unsafe {
+              STARTED = false;
+              println!("Stopped");
+              if let Err(_) = reply(&mut ws, Reply::Stopped).await {
+                break;
+              }
+            },
+            Action::Add(pid_payload) => unsafe {
+              // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
+              match EnumWindows(
+                Some(enum_windows_callback),
+                LPARAM(pid_payload.pid as isize),
+              ) {
+                Ok(_) => (),
+                Err(e) => {
+                  // if the return code is 0, there is no error
+                  if e.code().0 != 0 {
+                    eprintln!(
+                      "Error enumerating windows for pid({}): {e:?}",
+                      pid_payload.pid
+                    )
+                  }
                 }
               }
-            }
-          },
-          Action::Remove(pid_payload) => unsafe {
-            MANAGED_WINDOWS.retain(|w| w.pid != pid_payload.pid);
-            println!("Removed window for pid({})", pid_payload.pid);
-          },
-          Action::RemoveAll => unsafe {
-            MANAGED_WINDOWS.clear();
-            println!("Removed all windows");
-          },
-          Action::Update(offset) => unsafe {
-            if STARTED {
-              let mut to_be_removed = Vec::new();
-              for w in &MANAGED_WINDOWS {
-                let mut rect = RECT::default();
-                match GetWindowRect(w.hwnd, &mut rect) {
-                  Err(e) => {
+              if let Err(_) = reply(
+                &mut ws,
+                Reply::CurrentManagedPids(PidsPayload {
+                  pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+                }),
+              )
+              .await
+              {
+                break;
+              }
+            },
+            Action::Remove(pid_payload) => unsafe {
+              MANAGED_WINDOWS.retain(|w| w.pid != pid_payload.pid);
+              println!("Removed window for pid({})", pid_payload.pid);
+              if let Err(_) = reply(
+                &mut ws,
+                Reply::CurrentManagedPids(PidsPayload {
+                  pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+                }),
+              )
+              .await
+              {
+                break;
+              }
+            },
+            Action::RemoveAll => unsafe {
+              MANAGED_WINDOWS.clear();
+              println!("Removed all windows");
+              if let Err(_) = reply(
+                &mut ws,
+                Reply::CurrentManagedPids(PidsPayload {
+                  pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+                }),
+              )
+              .await
+              {
+                break;
+              }
+            },
+            Action::Update(offset) => unsafe {
+              if STARTED {
+                let mut to_be_removed = Vec::new();
+                for w in &MANAGED_WINDOWS {
+                  let mut rect = RECT::default();
+                  match GetWindowRect(w.hwnd, &mut rect) {
+                    Err(e) => {
+                      eprintln!(
+                        "Error getting window rect for pid({}), remove it. Error: {e:?}",
+                        w.pid
+                      );
+                      to_be_removed.push(w.pid);
+                      continue; // update next window
+                    }
+                    Ok(_) => (),
+                  }
+                  if let Err(e) = SetWindowPos(
+                    w.hwnd,
+                    None,
+                    // use relative offset
+                    offset.x + w.x,
+                    offset.y + w.y,
+                    // keep original size
+                    rect.right - rect.left,
+                    rect.bottom - rect.top,
+                    SET_WINDOW_POS_FLAGS(0),
+                  ) {
                     eprintln!(
-                      "Error getting window rect for pid({}), remove it. Error: {e:?}",
+                      "Error setting window pos for pid({}), remove it. Error: {e:?}",
                       w.pid
                     );
                     to_be_removed.push(w.pid);
-                    continue; // update next window
                   }
-                  Ok(_) => (),
                 }
-                if let Err(e) = SetWindowPos(
-                  w.hwnd,
-                  None,
-                  // use relative offset
-                  offset.x + w.x,
-                  offset.y + w.y,
-                  // keep original size
-                  rect.right - rect.left,
-                  rect.bottom - rect.top,
-                  SET_WINDOW_POS_FLAGS(0),
-                ) {
-                  eprintln!(
-                    "Error setting window pos for pid({}), remove it. Error: {e:?}",
-                    w.pid
-                  );
-                  to_be_removed.push(w.pid);
+
+                // remove the windows that failed to update
+                MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
+                if to_be_removed.len() > 0 {
+                  if let Err(_) = reply(
+                    &mut ws,
+                    Reply::CurrentManagedPids(PidsPayload {
+                      pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+                    }),
+                  )
+                  .await
+                  {
+                    break;
+                  }
                 }
               }
-
-              // remove the windows that failed to update
-              MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
-            }
-          },
+            },
+          }
         }
+        // other websocket message types are ignored
+        _ => (),
       }
-      // other websocket message types are ignored
-      _ => (),
     }
   }
 

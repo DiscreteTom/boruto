@@ -27,3 +27,19 @@ pub enum Action {
   #[serde(rename = "update")]
   Update(UpdatePayload),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PidsPayload {
+  pub pids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum Reply {
+  #[serde(rename = "started")]
+  Started,
+  #[serde(rename = "stopped")]
+  Stopped,
+  #[serde(rename = "currentManagedPids")]
+  CurrentManagedPids(PidsPayload),
+}

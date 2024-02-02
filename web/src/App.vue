@@ -16,6 +16,7 @@
       <button @click="add" :disabled="ws === null">Add</button>
       <button @click="remove" :disabled="ws === null">Remove</button>
       <button @click="removeAll" :disabled="ws === null">Remove All</button>
+      <span>Current PIDs: {{ currentPids }}</span>
     </div>
 
     <br />
@@ -74,8 +75,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const addr = ref('')
+const addr = ref('ws://localhost:9002')
 const pid = ref('')
+const currentPids = ref<number[]>([])
 const started = ref(false)
 const ws = ref<null | WebSocket>(null)
 const x = ref(0)
@@ -93,11 +95,25 @@ function connect() {
       log.value += 'connected\n'
     }
     ws.value.onmessage = (e) => {
-      // TODO
+      log.value += e.data + '\n'
+      const res = JSON.parse(e.data) as
+        | { type: 'started' | 'stopped' }
+        | { type: 'currentManagedPids'; pids: number[] }
+
+      if (res.type === 'started') {
+        started.value = true
+      } else if (res.type === 'stopped') {
+        started.value = false
+      } else if (res.type === 'currentManagedPids') {
+        currentPids.value = res.pids
+      }
     }
     ws.value.onclose = () => {
       log.value += 'disconnected\n'
       ws.value = null
+    }
+    ws.value.onerror = () => {
+      log.value += 'error\n'
     }
   }
 }
