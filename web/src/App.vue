@@ -11,15 +11,20 @@
     <br />
 
     <div>
-      <label>Window Management: </label>
-      <button @click="capturing = !capturing" :disabled="ws === null">
-        {{ capturing ? 'Stop Capture' : 'Capture' }}
-      </button>
-      <input type="text" v-model="pid" placeholder="pid" />
-      <button @click="add" :disabled="ws === null">Add</button>
-      <button @click="remove" :disabled="ws === null">Remove</button>
-      <button @click="removeAll" :disabled="ws === null">Remove All</button>
-      <span>Current PIDs: {{ currentPids }}</span>
+      <div>
+        <label>Window Management: </label>
+        <button @click="capturing = !capturing" :disabled="ws === null">
+          {{ capturing ? 'Stop Capture' : 'Capture a Window' }}
+        </button>
+        <button @click="removeAll" :disabled="ws === null">Remove All</button>
+      </div>
+      <div>
+        <label>Manually Manage HWND: </label>
+        <input type="text" v-model="hwnd" placeholder="hwnd" />
+        <button @click="add" :disabled="ws === null">Add</button>
+        <button @click="remove" :disabled="ws === null">Remove</button>
+      </div>
+      <span>Current HWNDs: {{ currentHwnds }}</span>
     </div>
 
     <br />
@@ -81,8 +86,8 @@ import { ref } from 'vue'
 
 const addr = ref('ws://localhost:9002')
 const capturing = ref(false)
-const pid = ref('')
-const currentPids = ref<number[]>([])
+const hwnd = ref('')
+const currentHwnds = ref<number[]>([])
 const started = ref(false)
 const ws = ref<null | WebSocket>(null)
 const x = ref(0)
@@ -103,14 +108,14 @@ function connect() {
       log.value += e.data + '\n'
       const res = JSON.parse(e.data) as
         | { type: 'started' | 'stopped' }
-        | { type: 'currentManagedPids'; pids: number[] }
+        | { type: 'currentManagedHwnds'; hwnds: number[] }
 
       if (res.type === 'started') {
         started.value = true
       } else if (res.type === 'stopped') {
         started.value = false
-      } else if (res.type === 'currentManagedPids') {
-        currentPids.value = res.pids
+      } else if (res.type === 'currentManagedHwnds') {
+        currentHwnds.value = res.hwnds
       }
     }
     ws.value.onclose = () => {
@@ -135,13 +140,13 @@ function toggle() {
 }
 
 function add() {
-  console.log('add', pid.value)
-  ws.value?.send(JSON.stringify({ type: 'add', pid: Number(pid.value) }))
+  console.log('add', hwnd.value)
+  ws.value?.send(JSON.stringify({ type: 'add', hwnd: Number(hwnd.value) }))
 }
 
 function remove() {
-  console.log('remove', pid.value)
-  ws.value?.send(JSON.stringify({ type: 'remove', pid: Number(pid.value) }))
+  console.log('remove', hwnd.value)
+  ws.value?.send(JSON.stringify({ type: 'remove', hwnd: Number(hwnd.value) }))
 }
 
 function removeAll() {

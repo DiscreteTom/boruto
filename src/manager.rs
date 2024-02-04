@@ -1,63 +1,21 @@
-use crate::protocol::{Action, PidsPayload, Reply, StatePayload};
+use crate::protocol::{Action, HwndsPayload, Reply, StatePayload};
 use tokio::sync::{mpsc, watch};
 use windows::Win32::{
-  Foundation::{BOOL, HWND, LPARAM, POINT, RECT},
-  UI::WindowsAndMessaging::{
-    EnumWindows, GetCursorPos, GetWindowRect, GetWindowThreadProcessId, MoveWindow, WindowFromPoint,
-  },
+  Foundation::{HWND, POINT, RECT},
+  UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, MoveWindow, WindowFromPoint},
 };
 
 #[derive(Debug)]
 struct WindowState {
   pub hwnd: HWND,
-  pub pid: u32,
   pub x: i32,
   pub y: i32,
 }
 
-static mut MANAGED_WINDOWS: Vec<WindowState> = Vec::new();
-
-// https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
-extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
-  let pid = l_param.0 as u32; // the target pid
-  let mut hwnd_pid = 0; // pid for the hwnd
-  unsafe {
-    // get pid by hwnd
-    GetWindowThreadProcessId(hwnd, Some(&mut hwnd_pid));
-  }
-  if hwnd_pid == pid {
-    unsafe {
-      let mut rect = RECT::default();
-      match GetWindowRect(hwnd, &mut rect) {
-        Ok(_) => {
-          // ensure the window is not already managed
-          if MANAGED_WINDOWS.iter().any(|w| w.hwnd == hwnd) {
-            return BOOL(0); // return false to stop enumerating
-          }
-
-          let state = WindowState {
-            hwnd,
-            // record the initial position
-            x: rect.left,
-            y: rect.top,
-            pid,
-          };
-          println!("Added window: {:?}", state);
-          MANAGED_WINDOWS.push(state);
-        }
-        Err(e) => eprintln!(
-          "Error getting window rect for pid({hwnd_pid}) and hwnd({}): {e:?}",
-          hwnd.0
-        ),
-      }
-    }
-    return BOOL(0); // return false to stop enumerating
-  }
-  return BOOL(1); // return true to continue enumerating
-}
-
 pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
   let mut started = false;
+  let mut managed_windows = Vec::new();
+
   loop {
     match action_rx.recv().await {
       None => break,
@@ -89,16 +47,18 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
                 match GetWindowRect(hwnd, &mut rect) {
                   Ok(_) => {
                     // ensure the window is not already managed
-                    if !MANAGED_WINDOWS.iter().any(|w| w.hwnd == hwnd) {
+                    if !managed_windows
+                      .iter()
+                      .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
+                    {
                       let state = WindowState {
                         hwnd,
                         // record the initial position
                         x: rect.left,
                         y: rect.top,
-                        pid: 0,
                       };
                       println!("Added window: {:?}", state);
-                      MANAGED_WINDOWS.push(state);
+                      managed_windows.push(state);
                     }
                   }
                   Err(e) => eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0),
@@ -107,62 +67,65 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
             }
           }
         }
-        Action::Add(pid_payload) => unsafe {
-          // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
-          match EnumWindows(
-            Some(enum_windows_callback),
-            LPARAM(pid_payload.pid as isize),
-          ) {
-            Ok(_) => (),
-            Err(e) => {
-              // if the return code is 0, there is no error
-              if e.code().0 != 0 {
-                eprintln!(
-                  "Error enumerating windows for pid({}): {e:?}",
-                  pid_payload.pid
-                )
+        Action::Add(hwnd_payload) => unsafe {
+          let hwnd = HWND(hwnd_payload.hwnd);
+          let mut rect = RECT::default();
+          // TODO: prevent dup code
+          match GetWindowRect(hwnd, &mut rect) {
+            Ok(_) => {
+              // ensure the window is not already managed
+              if !managed_windows.iter().any(|w| w.hwnd.0 == hwnd.0) {
+                let state = WindowState {
+                  hwnd,
+                  // record the initial position
+                  x: rect.left,
+                  y: rect.top,
+                };
+                println!("Added window: {:?}", state);
+                managed_windows.push(state);
               }
             }
+            Err(e) => eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0),
           }
-          if let Err(e) = reply_tx.send(Reply::CurrentManagedPids(PidsPayload {
-            pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+          if let Err(e) = reply_tx.send(Reply::CurrentManagedHwnds(HwndsPayload {
+            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
           })) {
-            eprintln!("Error sending current managed pids reply: {e:?}");
+            eprintln!("Error sending current managed hwnds reply: {e:?}");
             break;
           }
         },
-        Action::Remove(pid_payload) => unsafe {
-          MANAGED_WINDOWS.retain(|w| w.pid != pid_payload.pid);
-          println!("Removed window for pid({})", pid_payload.pid);
-          if let Err(e) = reply_tx.send(Reply::CurrentManagedPids(PidsPayload {
-            pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+        Action::Remove(hwnd_payload) => {
+          managed_windows.retain(|w| w.hwnd.0 != hwnd_payload.hwnd);
+          println!("Removed window for hwnd({})", hwnd_payload.hwnd);
+          if let Err(e) = reply_tx.send(Reply::CurrentManagedHwnds(HwndsPayload {
+            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
           })) {
-            eprintln!("Error sending current managed pids reply: {e:?}");
+            eprintln!("Error sending current managed hwnds reply: {e:?}");
             break;
           }
-        },
-        Action::RemoveAll => unsafe {
-          MANAGED_WINDOWS.clear();
+        }
+        Action::RemoveAll => {
+          managed_windows.clear();
           println!("Removed all windows");
-          if let Err(e) = reply_tx.send(Reply::CurrentManagedPids(PidsPayload {
-            pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+          if let Err(e) = reply_tx.send(Reply::CurrentManagedHwnds(HwndsPayload {
+            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
           })) {
-            eprintln!("Error sending current managed pids reply: {e:?}");
+            eprintln!("Error sending current managed hwnds reply: {e:?}");
             break;
           }
-        },
+        }
         Action::Update(offset) => unsafe {
           if started {
             let mut to_be_removed = Vec::new();
-            for w in &MANAGED_WINDOWS {
+            for w in &managed_windows {
               let mut rect = RECT::default();
               match GetWindowRect(w.hwnd, &mut rect) {
                 Err(e) => {
                   eprintln!(
-                    "Error getting window rect for pid({}), remove it. Error: {e:?}",
-                    w.pid
+                    "Error getting window rect for hwnd({}), remove it. Error: {e:?}",
+                    w.hwnd.0
                   );
-                  to_be_removed.push(w.pid);
+                  to_be_removed.push(w.hwnd.0);
                   continue; // update next window
                 }
                 Ok(_) => (),
@@ -178,34 +141,34 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
                 false,
               ) {
                 eprintln!(
-                  "Error setting window pos for pid({}), remove it. Error: {e:?}",
-                  w.pid
+                  "Error setting window pos for hwnd({}), remove it. Error: {e:?}",
+                  w.hwnd.0
                 );
-                to_be_removed.push(w.pid);
+                to_be_removed.push(w.hwnd.0);
               }
             }
 
             // remove the windows that failed to update
             if to_be_removed.len() > 0 {
-              MANAGED_WINDOWS.retain(|w| !to_be_removed.contains(&w.pid));
-              if let Err(e) = reply_tx.send(Reply::CurrentManagedPids(PidsPayload {
-                pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+              managed_windows.retain(|w| !to_be_removed.contains(&w.hwnd.0));
+              if let Err(e) = reply_tx.send(Reply::CurrentManagedHwnds(HwndsPayload {
+                hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
               })) {
-                eprintln!("Error sending current managed pids reply: {e:?}");
+                eprintln!("Error sending current managed hwnds reply: {e:?}");
                 break;
               }
             }
           }
         },
-        Action::Refresh => unsafe {
+        Action::Refresh => {
           if let Err(e) = reply_tx.send(Reply::State(StatePayload {
             started,
-            pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
           })) {
             eprintln!("Error sending state reply: {e:?}");
             break;
           }
-        },
+        }
       },
     }
   }

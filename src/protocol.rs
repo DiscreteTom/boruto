@@ -7,8 +7,8 @@ pub struct UpdatePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PidPayload {
-  pub pid: u32,
+pub struct HwndPayload {
+  pub hwnd: isize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,9 +21,9 @@ pub enum Action {
   #[serde(rename = "capture")]
   Capture,
   #[serde(rename = "add")]
-  Add(PidPayload),
+  Add(HwndPayload),
   #[serde(rename = "remove")]
-  Remove(PidPayload),
+  Remove(HwndPayload),
   #[serde(rename = "removeAll")]
   RemoveAll,
   #[serde(rename = "update")]
@@ -33,14 +33,14 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PidsPayload {
-  pub pids: Vec<u32>,
+pub struct HwndsPayload {
+  pub hwnds: Vec<isize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatePayload {
   pub started: bool,
-  pub pids: Vec<u32>,
+  pub hwnds: Vec<isize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,8 +50,8 @@ pub enum Reply {
   Started,
   #[serde(rename = "stopped")]
   Stopped,
-  #[serde(rename = "currentManagedPids")]
-  CurrentManagedPids(PidsPayload),
+  #[serde(rename = "currentManagedHwnds")]
+  CurrentManagedHwnds(HwndsPayload),
   #[serde(rename = "state")]
   State(StatePayload),
 }
