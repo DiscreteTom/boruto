@@ -14,7 +14,6 @@ struct WindowState {
 }
 
 static mut MANAGED_WINDOWS: Vec<WindowState> = Vec::new();
-static mut STARTED: bool = false;
 
 // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)
 extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
@@ -56,26 +55,27 @@ extern "system" fn enum_windows_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
 }
 
 pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
+  let mut started = false;
   loop {
     match action_rx.recv().await {
       None => break,
       Some(action) => match action {
-        Action::Start => unsafe {
-          STARTED = true;
+        Action::Start => {
+          started = true;
           println!("Started");
           if let Err(e) = reply_tx.send(Reply::Started) {
             eprintln!("Error sending started reply: {e:?}");
             break;
           }
-        },
-        Action::Stop => unsafe {
-          STARTED = false;
+        }
+        Action::Stop => {
+          started = false;
           println!("Stopped");
           if let Err(e) = reply_tx.send(Reply::Stopped) {
             eprintln!("Error sending stopped reply: {e:?}");
             break;
           }
-        },
+        }
         Action::Add(pid_payload) => unsafe {
           // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumwindows
           match EnumWindows(
@@ -121,7 +121,7 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
           }
         },
         Action::Update(offset) => unsafe {
-          if STARTED {
+          if started {
             let mut to_be_removed = Vec::new();
             for w in &MANAGED_WINDOWS {
               let mut rect = RECT::default();
@@ -168,7 +168,7 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
         },
         Action::Refresh => unsafe {
           if let Err(e) = reply_tx.send(Reply::State(StatePayload {
-            started: STARTED,
+            started,
             pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
           })) {
             eprintln!("Error sending state reply: {e:?}");
