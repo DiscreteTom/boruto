@@ -161,7 +161,7 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
           }
         },
         Action::Refresh => {
-          if let Err(e) = reply_tx.send(Reply::State(StatePayload {
+          if let Err(e) = reply_tx.send(Reply::Refresh(StatePayload {
             started,
             hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
           })) {
