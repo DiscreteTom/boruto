@@ -115,9 +115,11 @@ async fn process_action(
           .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
       }
       Action::Update(offset) => unsafe {
+        // only update when started
         if !*started {
-          ()
+          return Ok(());
         }
+
         let mut to_be_removed = Vec::new();
         for w in &*managed_windows {
           let mut rect = RECT::default();
