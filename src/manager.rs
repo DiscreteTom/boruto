@@ -61,57 +61,14 @@ async fn process_action(
             Err(e) => Err(format!("Error getting cursor pos: {e:?}")),
             Ok(()) => {
               let hwnd = WindowFromPoint(point);
-              let mut rect = RECT::default();
-              match GetWindowRect(hwnd, &mut rect) {
-                Ok(_) => {
-                  // ensure the window is not already managed
-                  if !managed_windows
-                    .iter()
-                    .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
-                  {
-                    let state = WindowState {
-                      hwnd,
-                      // record the initial position
-                      x: rect.left,
-                      y: rect.top,
-                    };
-                    println!("Added window: {:?}", state);
-                    managed_windows.push(state);
-                    return reply_current_managed_hwnds(reply_tx, managed_windows);
-                  }
-                  Ok(())
-                }
-                Err(e) => Err(format!(
-                  "Error getting window rect for hwnd({}): {e:?}",
-                  hwnd.0
-                )),
-              }
+              add_hwnd_reply_current(hwnd, managed_windows, reply_tx)
             }
           }
         }
       }
-      Action::Add(hwnd_payload) => unsafe {
-        let hwnd = HWND(hwnd_payload.hwnd);
-        let mut rect = RECT::default();
-        // TODO: prevent dup code
-        match GetWindowRect(hwnd, &mut rect) {
-          Ok(_) => {
-            // ensure the window is not already managed
-            if !managed_windows.iter().any(|w| w.hwnd.0 == hwnd.0) {
-              let state = WindowState {
-                hwnd,
-                // record the initial position
-                x: rect.left,
-                y: rect.top,
-              };
-              println!("Added window: {:?}", state);
-              managed_windows.push(state);
-            }
-          }
-          Err(e) => eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0),
-        }
-        reply_current_managed_hwnds(reply_tx, managed_windows)
-      },
+      Action::Add(hwnd_payload) => {
+        add_hwnd_reply_current(HWND(hwnd_payload.hwnd), managed_windows, reply_tx)
+      }
       Action::Remove(hwnd_payload) => {
         managed_windows.retain(|w| w.hwnd.0 != hwnd_payload.hwnd);
         println!("Removed window for hwnd({})", hwnd_payload.hwnd);
@@ -175,6 +132,40 @@ async fn process_action(
         }))
         .map_err(|e| format!("Error sending state reply: {e:?}")),
     },
+  }
+}
+
+fn add_hwnd_reply_current(
+  hwnd: HWND,
+  managed_windows: &mut Vec<WindowState>,
+  reply_tx: &watch::Sender<Reply>,
+) -> Result<(), String> {
+  let mut rect = RECT::default();
+
+  match unsafe { GetWindowRect(hwnd, &mut rect) } {
+    Ok(()) => {
+      // skip if the window is already managed
+      if managed_windows
+        .iter()
+        .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
+      {
+        return Ok(());
+      }
+
+      let state = WindowState {
+        hwnd,
+        // record the initial position
+        x: rect.left,
+        y: rect.top,
+      };
+      println!("Added window: {:?}", state);
+      managed_windows.push(state);
+      reply_current_managed_hwnds(reply_tx, managed_windows)
+    }
+    Err(e) => Err(format!(
+      "Error getting window rect for hwnd({}): {e:?}",
+      hwnd.0
+    )),
   }
 }
 
