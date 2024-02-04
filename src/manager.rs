@@ -1,8 +1,10 @@
 use crate::protocol::{Action, PidsPayload, Reply, StatePayload};
 use tokio::sync::{mpsc, watch};
 use windows::Win32::{
-  Foundation::{BOOL, HWND, LPARAM, RECT},
-  UI::WindowsAndMessaging::{EnumWindows, GetWindowRect, GetWindowThreadProcessId, MoveWindow},
+  Foundation::{BOOL, HWND, LPARAM, POINT, RECT},
+  UI::WindowsAndMessaging::{
+    EnumWindows, GetCursorPos, GetWindowRect, GetWindowThreadProcessId, MoveWindow, WindowFromPoint,
+  },
 };
 
 #[derive(Debug)]
@@ -74,6 +76,35 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
           if let Err(e) = reply_tx.send(Reply::Stopped) {
             eprintln!("Error sending stopped reply: {e:?}");
             break;
+          }
+        }
+        Action::Capture => {
+          let mut point = POINT::default();
+          unsafe {
+            match GetCursorPos(&mut point) {
+              Err(e) => eprintln!("Error getting cursor pos: {e:?}"),
+              Ok(()) => {
+                let hwnd = WindowFromPoint(point);
+                let mut rect = RECT::default();
+                match GetWindowRect(hwnd, &mut rect) {
+                  Ok(_) => {
+                    // ensure the window is not already managed
+                    if !MANAGED_WINDOWS.iter().any(|w| w.hwnd == hwnd) {
+                      let state = WindowState {
+                        hwnd,
+                        // record the initial position
+                        x: rect.left,
+                        y: rect.top,
+                        pid: 0,
+                      };
+                      println!("Added window: {:?}", state);
+                      MANAGED_WINDOWS.push(state);
+                    }
+                  }
+                  Err(e) => eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0),
+                }
+              }
+            }
           }
         }
         Action::Add(pid_payload) => unsafe {

@@ -18,6 +18,8 @@ pub enum Action {
   Start,
   #[serde(rename = "stop")]
   Stop,
+  #[serde(rename = "capture")]
+  Capture,
   #[serde(rename = "add")]
   Add(PidPayload),
   #[serde(rename = "remove")]

@@ -12,6 +12,9 @@
 
     <div>
       <label>Window Management: </label>
+      <button @click="capturing = !capturing" :disabled="ws === null">
+        {{ capturing ? 'Stop Capture' : 'Capture' }}
+      </button>
       <input type="text" v-model="pid" placeholder="pid" />
       <button @click="add" :disabled="ws === null">Add</button>
       <button @click="remove" :disabled="ws === null">Remove</button>
@@ -77,6 +80,7 @@
 import { ref } from 'vue'
 
 const addr = ref('ws://localhost:9002')
+const capturing = ref(false)
 const pid = ref('')
 const currentPids = ref<number[]>([])
 const started = ref(false)
@@ -159,4 +163,12 @@ setInterval(() => {
   rps.value = count
   count = 0
 }, 1000)
+
+document.addEventListener('keydown', () => {
+  if (!capturing.value) return
+  ws.value?.send(JSON.stringify({ type: 'capture' }))
+
+  // capture one window at a time
+  capturing.value = false
+})
 </script>
