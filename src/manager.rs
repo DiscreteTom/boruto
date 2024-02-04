@@ -12,19 +12,19 @@ struct WindowState {
   pub y: i32,
 }
 
+struct ManagerState {
+  pub started: bool,
+  pub managed_windows: Vec<WindowState>,
+}
+
 pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
-  let mut started = false;
-  let mut managed_windows = Vec::new();
+  let mut state = ManagerState {
+    started: false,
+    managed_windows: Vec::new(),
+  };
 
   loop {
-    if let Err(e) = process_action(
-      &mut action_rx,
-      &reply_tx,
-      &mut started,
-      &mut managed_windows,
-    )
-    .await
-    {
+    if let Err(e) = process_action(&mut action_rx, &reply_tx, &mut state).await {
       eprintln!("{e}");
       break;
     }
@@ -34,21 +34,20 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
 async fn process_action(
   action_rx: &mut mpsc::Receiver<Action>,
   reply_tx: &watch::Sender<Reply>,
-  started: &mut bool,
-  managed_windows: &mut Vec<WindowState>,
+  state: &mut ManagerState,
 ) -> Result<(), String> {
   match action_rx.recv().await {
     None => Ok(()),
     Some(action) => match action {
       Action::Start => {
-        *started = true;
+        state.started = true;
         println!("Started");
         reply_tx
           .send(Reply::Started)
           .map_err(|e| format!("Error sending started reply: {e:?}"))
       }
       Action::Stop => {
-        *started = false;
+        state.started = false;
         println!("Stopped");
         reply_tx
           .send(Reply::Stopped)
@@ -65,30 +64,30 @@ async fn process_action(
           // TODO: get parent hwnd?
           let hwnd = WindowFromPoint(point);
           let hwnd = GetParent(hwnd);
-          add_hwnd_reply_current(hwnd, managed_windows, reply_tx)
+          add_hwnd_reply_current(hwnd, state, reply_tx)
         }
       }
-      Action::Add(hwnd_payload) => {
-        add_hwnd_reply_current(HWND(hwnd_payload.hwnd), managed_windows, reply_tx)
-      }
+      Action::Add(hwnd_payload) => add_hwnd_reply_current(HWND(hwnd_payload.hwnd), state, reply_tx),
       Action::Remove(hwnd_payload) => {
-        managed_windows.retain(|w| w.hwnd.0 != hwnd_payload.hwnd);
+        state
+          .managed_windows
+          .retain(|w| w.hwnd.0 != hwnd_payload.hwnd);
         println!("Removed window for hwnd({})", hwnd_payload.hwnd);
-        reply_current_managed_hwnds(reply_tx, managed_windows)
+        reply_current_managed_hwnds(reply_tx, state)
       }
       Action::RemoveAll => {
-        managed_windows.clear();
+        state.managed_windows.clear();
         println!("Removed all windows");
-        reply_current_managed_hwnds(reply_tx, managed_windows)
+        reply_current_managed_hwnds(reply_tx, state)
       }
       Action::Update(offset) => unsafe {
         // only update when started
-        if !*started {
+        if !state.started {
           return Ok(());
         }
 
         let mut to_be_removed = Vec::new();
-        for w in &*managed_windows {
+        for w in &state.managed_windows {
           let mut rect = RECT::default();
           // GetWindowRect is very fast, < 1ms
           if let Err(e) = GetWindowRect(w.hwnd, &mut rect) {
@@ -125,13 +124,15 @@ async fn process_action(
           return Ok(());
         }
         // else, remove the windows that failed to update and reply current
-        managed_windows.retain(|w| !to_be_removed.contains(&w.hwnd.0));
-        reply_current_managed_hwnds(reply_tx, managed_windows)
+        state
+          .managed_windows
+          .retain(|w| !to_be_removed.contains(&w.hwnd.0));
+        reply_current_managed_hwnds(reply_tx, state)
       },
       Action::Refresh => reply_tx
         .send(Reply::Refresh(StatePayload {
-          started: *started,
-          hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
+          started: state.started,
+          hwnds: state.managed_windows.iter().map(|w| w.hwnd.0).collect(),
         }))
         .map_err(|e| format!("Error sending state reply: {e:?}")),
     },
@@ -140,7 +141,7 @@ async fn process_action(
 
 fn add_hwnd_reply_current(
   hwnd: HWND,
-  managed_windows: &mut Vec<WindowState>,
+  state: &mut ManagerState,
   reply_tx: &watch::Sender<Reply>,
 ) -> Result<(), String> {
   let mut rect = RECT::default();
@@ -151,31 +152,32 @@ fn add_hwnd_reply_current(
   }
 
   // skip if the window is already managed
-  if managed_windows
+  if state
+    .managed_windows
     .iter()
     .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
   {
     return Ok(());
   }
 
-  let state = WindowState {
+  let window_state = WindowState {
     hwnd,
     // record the initial position
     x: rect.left,
     y: rect.top,
   };
-  println!("Added window: {:?}", state);
-  managed_windows.push(state);
-  reply_current_managed_hwnds(reply_tx, managed_windows)
+  println!("Added window: {:?}", window_state);
+  state.managed_windows.push(window_state);
+  reply_current_managed_hwnds(reply_tx, state)
 }
 
 fn reply_current_managed_hwnds(
   reply_tx: &watch::Sender<Reply>,
-  managed_windows: &mut Vec<WindowState>,
+  state: &mut ManagerState,
 ) -> Result<(), String> {
   reply_tx
     .send(Reply::CurrentManagedHwnds(HwndsPayload {
-      hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
+      hwnds: state.managed_windows.iter().map(|w| w.hwnd.0).collect(),
     }))
     .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
 }
