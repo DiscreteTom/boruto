@@ -61,8 +61,8 @@ async fn process_action(
             return Ok(());
           }
 
-          // TODO: get parent hwnd?
           let hwnd = WindowFromPoint(point);
+          // TODO: sometimes GetParent got hwnd(0), need to investigate
           let hwnd = GetParent(hwnd);
           add_hwnd_reply_current(hwnd, state, reply_tx)
         }
