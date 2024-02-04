@@ -77,6 +77,7 @@ async fn process_action(
                     };
                     println!("Added window: {:?}", state);
                     managed_windows.push(state);
+                    return reply_current_managed_hwnds(reply_tx, managed_windows);
                   }
                   Ok(())
                 }
