@@ -1,4 +1,4 @@
-use crate::protocol::{Action, PidsPayload, Reply};
+use crate::protocol::{Action, PidsPayload, Reply, StatePayload};
 use tokio::sync::{mpsc, watch};
 use windows::Win32::{
   Foundation::{BOOL, HWND, LPARAM, RECT},
@@ -164,6 +164,15 @@ pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watc
                 break;
               }
             }
+          }
+        },
+        Action::Refresh => unsafe {
+          if let Err(e) = reply_tx.send(Reply::State(StatePayload {
+            started: STARTED,
+            pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
+          })) {
+            eprintln!("Error sending state reply: {e:?}");
+            break;
           }
         },
       },

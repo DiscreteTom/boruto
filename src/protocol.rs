@@ -26,10 +26,18 @@ pub enum Action {
   RemoveAll,
   #[serde(rename = "update")]
   Update(UpdatePayload),
+  /// Internal used to notify the manager to send Reply::State.
+  Refresh,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PidsPayload {
+  pub pids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatePayload {
+  pub started: bool,
   pub pids: Vec<u32>,
 }
 
@@ -42,4 +50,6 @@ pub enum Reply {
   Stopped,
   #[serde(rename = "currentManagedPids")]
   CurrentManagedPids(PidsPayload),
+  #[serde(rename = "state")]
+  State(StatePayload),
 }

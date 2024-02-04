@@ -77,36 +77,12 @@ async fn serve_websocket(
 
   println!("WebSocket Connected: {peer}");
 
-  // TODO: init state
-  // if let Err(_) = reply(
-  //   &mut ws,
-  //   if unsafe { STARTED } {
-  //     Reply::Started
-  //   } else {
-  //     Reply::Stopped
-  //   },
-  // )
-  // .await
-  // {
-  //   init_failed = true;
-  // }
-
-  // unsafe {
-  //   if !init_failed {
-  //     if let Err(_) = reply(
-  //       &mut ws,
-  //       Reply::CurrentManagedPids(PidsPayload {
-  //         pids: MANAGED_WINDOWS.iter().map(|w| w.pid).collect(),
-  //       }),
-  //     )
-  //     .await
-  //     {
-  //       init_failed = true;
-  //     }
-  //   }
-  // }
-
-  // if !init_failed {
+  // send initial states
+  if let Err(e) = action_tx.send(Action::Refresh).await {
+    eprintln!("Error sending refresh action: {e:?}");
+    println!("WebSocket Disconnected: {}", peer);
+    return Ok(());
+  }
 
   loop {
     tokio::select! {
