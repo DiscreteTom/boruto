@@ -88,17 +88,18 @@ async fn process_action(
         let mut to_be_removed = Vec::new();
         for w in &*managed_windows {
           let mut rect = RECT::default();
-          match GetWindowRect(w.hwnd, &mut rect) {
-            Err(e) => {
-              eprintln!(
-                "Error getting window rect for hwnd({}), remove it. Error: {e:?}",
-                w.hwnd.0
-              );
-              to_be_removed.push(w.hwnd.0);
-              continue; // update next window
-            }
-            Ok(_) => (),
+          // GetWindowRect is very fast, < 1ms
+          if let Err(e) = GetWindowRect(w.hwnd, &mut rect) {
+            eprintln!(
+              "Error getting window rect for hwnd({}), remove it. Error: {e:?}",
+              w.hwnd.0
+            );
+            to_be_removed.push(w.hwnd.0);
+            continue; // update next window
           }
+          // TODO: check if the window is still visible
+          // TODO: check if there is any faster way to get window position
+          // currently MoveWindow will take ~10ms
           if let Err(e) = MoveWindow(
             w.hwnd,
             // use relative offset
@@ -117,13 +118,13 @@ async fn process_action(
           }
         }
 
-        // remove the windows that failed to update
-        if to_be_removed.len() > 0 {
-          managed_windows.retain(|w| !to_be_removed.contains(&w.hwnd.0));
-
-          return reply_current_managed_hwnds(reply_tx, managed_windows);
+        // if no window failed to update, just return ok
+        if to_be_removed.len() == 0 {
+          return Ok(());
         }
-        Ok(())
+        // else, remove the windows that failed to update and reply current
+        managed_windows.retain(|w| !to_be_removed.contains(&w.hwnd.0));
+        reply_current_managed_hwnds(reply_tx, managed_windows)
       },
       Action::Refresh => reply_tx
         .send(Reply::Refresh(StatePayload {
