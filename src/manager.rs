@@ -2,7 +2,7 @@ use crate::protocol::{Action, HwndsPayload, Reply, StatePayload};
 use tokio::sync::{mpsc, watch};
 use windows::Win32::{
   Foundation::{HWND, POINT, RECT},
-  UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, MoveWindow, WindowFromPoint},
+  UI::WindowsAndMessaging::{GetCursorPos, GetParent, GetWindowRect, MoveWindow, WindowFromPoint},
 };
 
 #[derive(Debug)]
@@ -57,13 +57,15 @@ async fn process_action(
       Action::Capture => {
         let mut point = POINT::default();
         unsafe {
-          match GetCursorPos(&mut point) {
-            Err(e) => Err(format!("Error getting cursor pos: {e:?}")),
-            Ok(()) => {
-              let hwnd = WindowFromPoint(point);
-              add_hwnd_reply_current(hwnd, managed_windows, reply_tx)
-            }
+          if let Err(e) = GetCursorPos(&mut point) {
+            eprintln!("Error getting cursor pos: {e:?}");
+            return Ok(());
           }
+
+          // TODO: get parent hwnd?
+          let hwnd = WindowFromPoint(point);
+          let hwnd = GetParent(hwnd);
+          add_hwnd_reply_current(hwnd, managed_windows, reply_tx)
         }
       }
       Action::Add(hwnd_payload) => {
@@ -143,31 +145,28 @@ fn add_hwnd_reply_current(
 ) -> Result<(), String> {
   let mut rect = RECT::default();
 
-  match unsafe { GetWindowRect(hwnd, &mut rect) } {
-    Ok(()) => {
-      // skip if the window is already managed
-      if managed_windows
-        .iter()
-        .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
-      {
-        return Ok(());
-      }
-
-      let state = WindowState {
-        hwnd,
-        // record the initial position
-        x: rect.left,
-        y: rect.top,
-      };
-      println!("Added window: {:?}", state);
-      managed_windows.push(state);
-      reply_current_managed_hwnds(reply_tx, managed_windows)
-    }
-    Err(e) => Err(format!(
-      "Error getting window rect for hwnd({}): {e:?}",
-      hwnd.0
-    )),
+  if let Err(e) = unsafe { GetWindowRect(hwnd, &mut rect) } {
+    eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0);
+    return Ok(());
   }
+
+  // skip if the window is already managed
+  if managed_windows
+    .iter()
+    .any(|w: &WindowState| w.hwnd.0 == hwnd.0)
+  {
+    return Ok(());
+  }
+
+  let state = WindowState {
+    hwnd,
+    // record the initial position
+    x: rect.left,
+    y: rect.top,
+  };
+  println!("Added window: {:?}", state);
+  managed_windows.push(state);
+  reply_current_managed_hwnds(reply_tx, managed_windows)
 }
 
 fn reply_current_managed_hwnds(
