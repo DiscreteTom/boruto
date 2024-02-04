@@ -2,7 +2,9 @@ use crate::protocol::{Action, HwndsPayload, Reply, StatePayload};
 use tokio::sync::{mpsc, watch};
 use windows::Win32::{
   Foundation::{HWND, POINT, RECT},
-  UI::WindowsAndMessaging::{GetCursorPos, GetParent, GetWindowRect, MoveWindow, WindowFromPoint},
+  UI::WindowsAndMessaging::{
+    GetAncestor, GetCursorPos, GetWindowRect, MoveWindow, WindowFromPoint, GA_ROOT,
+  },
 };
 
 #[derive(Debug)]
@@ -62,9 +64,12 @@ async fn process_action(
           }
 
           let hwnd = WindowFromPoint(point);
-          // TODO: sometimes GetParent got hwnd(0), need to investigate
-          let hwnd = GetParent(hwnd);
-          add_hwnd_reply_current(hwnd, state, reply_tx)
+          // tested, shouldn't use parent. root or owner are both fine
+          // let parent = GetAncestor(hwnd, GA_PARENT);
+          let root = GetAncestor(hwnd, GA_ROOT);
+          // let owner = GetAncestor(hwnd, GA_ROOTOWNER);
+          // println!("parent: {parent:?}, root: {root:?}, owner: {owner:?}");
+          add_hwnd_reply_current(root, state, reply_tx)
         }
       }
       Action::Add(hwnd_payload) => add_hwnd_reply_current(HWND(hwnd_payload.hwnd), state, reply_tx),
