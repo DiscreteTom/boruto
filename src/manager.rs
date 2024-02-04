@@ -8,8 +8,8 @@ use windows::Win32::{
 #[derive(Debug)]
 struct WindowState {
   pub hwnd: HWND,
-  pub x: i32,
-  pub y: i32,
+  pub init_x: i32,
+  pub init_y: i32,
 }
 
 struct ManagerState {
@@ -104,8 +104,8 @@ async fn process_action(
           if let Err(e) = MoveWindow(
             w.hwnd,
             // use relative offset
-            offset.x + w.x,
-            offset.y + w.y,
+            offset.x + w.init_x,
+            offset.y + w.init_y,
             // keep original size
             rect.right - rect.left,
             rect.bottom - rect.top,
@@ -163,8 +163,8 @@ fn add_hwnd_reply_current(
   let window_state = WindowState {
     hwnd,
     // record the initial position
-    x: rect.left,
-    y: rect.top,
+    init_x: rect.left,
+    init_y: rect.top,
   };
   println!("Added window: {:?}", window_state);
   state.managed_windows.push(window_state);
