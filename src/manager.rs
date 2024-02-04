@@ -90,29 +90,17 @@ async fn process_action(
           }
           Err(e) => eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0),
         }
-        reply_tx
-          .send(Reply::CurrentManagedHwnds(HwndsPayload {
-            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
-          }))
-          .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
+        reply_current_managed_hwnds(reply_tx, managed_windows)
       },
       Action::Remove(hwnd_payload) => {
         managed_windows.retain(|w| w.hwnd.0 != hwnd_payload.hwnd);
         println!("Removed window for hwnd({})", hwnd_payload.hwnd);
-        reply_tx
-          .send(Reply::CurrentManagedHwnds(HwndsPayload {
-            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
-          }))
-          .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
+        reply_current_managed_hwnds(reply_tx, managed_windows)
       }
       Action::RemoveAll => {
         managed_windows.clear();
         println!("Removed all windows");
-        reply_tx
-          .send(Reply::CurrentManagedHwnds(HwndsPayload {
-            hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
-          }))
-          .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
+        reply_current_managed_hwnds(reply_tx, managed_windows)
       }
       Action::Update(offset) => unsafe {
         // only update when started
@@ -156,11 +144,7 @@ async fn process_action(
         if to_be_removed.len() > 0 {
           managed_windows.retain(|w| !to_be_removed.contains(&w.hwnd.0));
 
-          return reply_tx
-            .send(Reply::CurrentManagedHwnds(HwndsPayload {
-              hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
-            }))
-            .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"));
+          return reply_current_managed_hwnds(reply_tx, managed_windows);
         }
         Ok(())
       },
@@ -172,6 +156,17 @@ async fn process_action(
         .map_err(|e| format!("Error sending state reply: {e:?}")),
     },
   }
+}
+
+fn reply_current_managed_hwnds(
+  reply_tx: &watch::Sender<Reply>,
+  managed_windows: &mut Vec<WindowState>,
+) -> Result<(), String> {
+  reply_tx
+    .send(Reply::CurrentManagedHwnds(HwndsPayload {
+      hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
+    }))
+    .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
 }
 
 pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
