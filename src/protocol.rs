@@ -52,6 +52,6 @@ pub enum Reply {
   Stopped,
   #[serde(rename = "currentManagedHwnds")]
   CurrentManagedHwnds(HwndsPayload),
-  #[serde(rename = "state")]
-  State(StatePayload),
+  #[serde(rename = "refresh")]
+  Refresh(StatePayload),
 }

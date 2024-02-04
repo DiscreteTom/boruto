@@ -109,12 +109,16 @@ function connect() {
       const res = JSON.parse(e.data) as
         | { type: 'started' | 'stopped' }
         | { type: 'currentManagedHwnds'; hwnds: number[] }
+        | { type: 'refresh'; started: boolean; hwnds: number[] }
 
       if (res.type === 'started') {
         started.value = true
       } else if (res.type === 'stopped') {
         started.value = false
       } else if (res.type === 'currentManagedHwnds') {
+        currentHwnds.value = res.hwnds
+      } else if (res.type === 'refresh') {
+        started.value = res.started
         currentHwnds.value = res.hwnds
       }
     }
