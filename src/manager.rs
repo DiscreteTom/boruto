@@ -12,6 +12,25 @@ struct WindowState {
   pub y: i32,
 }
 
+pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
+  let mut started = false;
+  let mut managed_windows = Vec::new();
+
+  loop {
+    if let Err(e) = process_action(
+      &mut action_rx,
+      &reply_tx,
+      &mut started,
+      &mut managed_windows,
+    )
+    .await
+    {
+      eprintln!("{e}");
+      break;
+    }
+  }
+}
+
 async fn process_action(
   action_rx: &mut mpsc::Receiver<Action>,
   reply_tx: &watch::Sender<Reply>,
@@ -167,23 +186,4 @@ fn reply_current_managed_hwnds(
       hwnds: managed_windows.iter().map(|w| w.hwnd.0).collect(),
     }))
     .map_err(|e| format!("Error sending current managed hwnds reply: {e:?}"))
-}
-
-pub async fn start_manager(mut action_rx: mpsc::Receiver<Action>, reply_tx: watch::Sender<Reply>) {
-  let mut started = false;
-  let mut managed_windows = Vec::new();
-
-  loop {
-    if let Err(e) = process_action(
-      &mut action_rx,
-      &reply_tx,
-      &mut started,
-      &mut managed_windows,
-    )
-    .await
-    {
-      eprintln!("{e}");
-      break;
-    }
-  }
 }
