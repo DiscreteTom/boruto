@@ -173,8 +173,9 @@ setInterval(() => {
   count = 0
 }, 1000)
 
-document.addEventListener('keydown', () => {
-  if (!capturing.value) return
+document.addEventListener('keydown', (e) => {
+  if (!capturing.value || e.key !== 'c') return
+
   ws.value?.send(JSON.stringify({ type: 'capture' }))
 
   // capture one window at a time
