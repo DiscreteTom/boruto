@@ -20,6 +20,38 @@ use tokio_tungstenite::{
   WebSocketStream,
 };
 
+pub async fn start_server(
+  addr: String,
+  action_tx: mpsc::Sender<Action>,
+  reply_rx: watch::Receiver<Reply>,
+) {
+  let listener = TcpListener::bind(&addr).await.expect("Can't listen");
+  let mut http = http1::Builder::new();
+  http.keep_alive(true);
+
+  println!("Listening on: {addr}");
+
+  loop {
+    let (stream, peer) = listener.accept().await.expect("failed to accept");
+    let action_tx = action_tx.clone();
+    let reply_rx = reply_rx.clone();
+    let connection = http
+      .serve_connection(
+        TokioIo::new(stream),
+        hyper::service::service_fn(move |req| {
+          handle_request(req, peer, action_tx.clone(), reply_rx.clone())
+        }),
+      )
+      .with_upgrades();
+
+    tokio::spawn(async move {
+      if let Err(err) = connection.await {
+        println!("Error serving HTTP connection: {err:?}");
+      }
+    });
+  }
+}
+
 /// Handle a HTTP or WebSocket request.
 async fn handle_request(
   mut request: Request<Incoming>,
@@ -47,23 +79,17 @@ async fn handle_request(
 }
 
 async fn reply(ws: &mut WebSocketStream<TokioIo<Upgraded>>, reply: Reply) -> Result<(), ()> {
-  match ws
-    .send(Message::Text(match serde_json::to_string(&reply) {
-      Ok(s) => s,
-      Err(e) => {
-        eprintln!("Error serializing reply: {e:?}");
-        return Err(());
-      }
-    }))
-    .await
-  {
-    Ok(_) => (),
+  ws.send(Message::Text(match serde_json::to_string(&reply) {
+    Ok(s) => s,
     Err(e) => {
-      eprintln!("Error sending reply: {e:?}");
+      eprintln!("Error serializing reply: {e:?}");
       return Err(());
     }
-  }
-  Ok(())
+  }))
+  .await
+  .map_err(|e| {
+    eprintln!("Error sending reply: {e:?}");
+  })
 }
 
 async fn serve_websocket(
@@ -80,7 +106,7 @@ async fn serve_websocket(
   // send initial states
   if let Err(e) = action_tx.send(Action::Refresh).await {
     eprintln!("Error sending refresh action: {e:?}");
-    println!("WebSocket Disconnected: {}", peer);
+    println!("WebSocket Disconnected: {peer}");
     return Ok(());
   }
 
@@ -119,38 +145,6 @@ async fn serve_websocket(
     }
   }
 
-  println!("WebSocket Disconnected: {}", peer);
+  println!("WebSocket Disconnected: {peer}");
   Ok(())
-}
-
-pub async fn start_server(
-  addr: String,
-  action_tx: mpsc::Sender<Action>,
-  reply_rx: watch::Receiver<Reply>,
-) {
-  let listener = TcpListener::bind(&addr).await.expect("Can't listen");
-  let mut http = http1::Builder::new();
-  http.keep_alive(true);
-
-  println!("Listening on: {addr}");
-
-  loop {
-    let (stream, peer) = listener.accept().await.expect("failed to accept");
-    let action_tx = action_tx.clone();
-    let reply_rx = reply_rx.clone();
-    let connection = http
-      .serve_connection(
-        TokioIo::new(stream),
-        hyper::service::service_fn(move |req| {
-          handle_request(req, peer, action_tx.clone(), reply_rx.clone())
-        }),
-      )
-      .with_upgrades();
-
-    tokio::spawn(async move {
-      if let Err(err) = connection.await {
-        println!("Error serving HTTP connection: {err:?}");
-      }
-    });
-  }
 }
