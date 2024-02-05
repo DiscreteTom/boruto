@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, watch};
 async fn main() {
   let addr = env::args()
     .nth(1)
-    .unwrap_or_else(|| "127.0.0.1:9002".to_string());
+    .unwrap_or_else(|| "0.0.0.0:9002".to_string());
 
   let (action_tx, action_rx) = mpsc::channel(100);
   let (reply_tx, reply_rx) = watch::channel(Reply::Stopped);
