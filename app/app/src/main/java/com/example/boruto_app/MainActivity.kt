@@ -2,7 +2,6 @@ package com.example.boruto_app
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -153,8 +152,9 @@ class MainActivity : AppCompatActivity() {
                         // Task completed successfully
                         // ...
                         if (faces.size > 0){
+                            val ex = faces[0].headEulerAngleX
                             val ey = faces[0].headEulerAngleY
-                            viewBinding.eulerY.text = "Euler Y: $ey"
+                            viewBinding.euler.text = "Euler X: $ex\nEuler Y: $ey"
                             val latency = System.currentTimeMillis() - now
                             viewBinding.latency.text = "Latency: $latency(ms)"
                         }

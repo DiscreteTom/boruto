@@ -40,7 +40,7 @@
 
 
     <TextView
-        android:id="@+id/eulerY"
+        android:id="@+id/euler"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="TextView"
