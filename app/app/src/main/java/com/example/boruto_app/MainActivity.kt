@@ -19,12 +19,22 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.http.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.runBlocking
+import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewBinding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var websocketExecutor: ExecutorService
+    private val channel = Channel<Float>(5)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         navView.setupWithNavController(navController)
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+        websocketExecutor = Executors.newSingleThreadExecutor()
 
         // Request camera permissions
         if (allPermissionsGranted()) {
@@ -92,6 +103,27 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
+        val client = HttpClient(CIO) {
+            install(WebSockets) {}
+        }
+        websocketExecutor.execute {
+            runBlocking {
+                try {
+                    client.webSocket(method = HttpMethod.Get, host = "192.168.1.6", port = 9002) {
+                        while(true) {
+                            val ey = (channel.receive() * 50).toInt()
+                            send(Frame.Text("{\"type\":\"update\",\"x\":$ey,\"y\":0}"))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        baseContext, e.toString(), Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            client.close()
+        }
+
         cameraProviderFuture.addListener({
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
@@ -104,8 +136,8 @@ class MainActivity : AppCompatActivity() {
             // Select front camera as a default
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
-            val imageAnalyzer = ImageAnalysis.Builder().build().also {
-                it.setAnalyzer(cameraExecutor, FaceTrackingAnalyzer(viewBinding))
+            val imageAnalyzer = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build().also {
+                it.setAnalyzer(cameraExecutor, FaceTrackingAnalyzer(viewBinding, channel))
             }
 
             try {
@@ -125,6 +157,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+        websocketExecutor.shutdown()
     }
 
     companion object {
@@ -136,9 +169,10 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private class FaceTrackingAnalyzer(val viewBinding: ActivityMainBinding) : ImageAnalysis.Analyzer {
-        val options = FaceDetectorOptions.Builder().enableTracking().build()
+    private class FaceTrackingAnalyzer(val viewBinding: ActivityMainBinding, val channel: Channel<Float>) : ImageAnalysis.Analyzer {
+        val options = FaceDetectorOptions.Builder().build()
         val detector = FaceDetection.getClient(options)
+        var last:Long = 0
 
         @ExperimentalGetImage
         override fun analyze(imageProxy: ImageProxy) {
@@ -147,6 +181,7 @@ class MainActivity : AppCompatActivity() {
                 val image =
                     InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                 val now = System.currentTimeMillis()
+                val interval = now - last
 
                 detector.process(image).addOnSuccessListener { faces ->
                         // Task completed successfully
@@ -156,7 +191,11 @@ class MainActivity : AppCompatActivity() {
                             val ey = faces[0].headEulerAngleY
                             viewBinding.euler.text = "Euler X: $ex\nEuler Y: $ey"
                             val latency = System.currentTimeMillis() - now
-                            viewBinding.latency.text = "Latency: ${latency}ms"
+                            last = now
+                            viewBinding.latency.text = "Process Latency: ${latency}ms\nFrame Interval: ${interval}ms"
+//                            if (channel.isEmpty) {
+                                channel.trySend(ey)
+//                            }
                         }
                     }.addOnFailureListener { _ ->
                         // Task failed with an exception
