@@ -90,8 +90,6 @@ class MainActivity : AppCompatActivity() {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-
-
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -108,7 +106,7 @@ class MainActivity : AppCompatActivity() {
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
             val imageAnalyzer = ImageAnalysis.Builder().build().also {
-                it.setAnalyzer(cameraExecutor, FaceTrackingAnalyzer())
+                it.setAnalyzer(cameraExecutor, FaceTrackingAnalyzer(viewBinding))
             }
 
             try {
@@ -139,7 +137,7 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private class FaceTrackingAnalyzer : ImageAnalysis.Analyzer {
+    private class FaceTrackingAnalyzer(val viewBinding: ActivityMainBinding) : ImageAnalysis.Analyzer {
         val options = FaceDetectorOptions.Builder().enableTracking().build()
         val detector = FaceDetection.getClient(options)
 
@@ -154,7 +152,8 @@ class MainActivity : AppCompatActivity() {
                         // Task completed successfully
                         // ...
                         if (faces.size > 0){
-                            Log.i(TAG, faces[0].headEulerAngleY.toString())
+                            val ey = faces[0].headEulerAngleY
+                            viewBinding.eulerY.text = "Euler Y: $ey"
                         }
                     }.addOnFailureListener { _ ->
                         // Task failed with an exception
