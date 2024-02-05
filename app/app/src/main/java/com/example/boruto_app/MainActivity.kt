@@ -156,7 +156,7 @@ class MainActivity : AppCompatActivity() {
                             val ey = faces[0].headEulerAngleY
                             viewBinding.euler.text = "Euler X: $ex\nEuler Y: $ey"
                             val latency = System.currentTimeMillis() - now
-                            viewBinding.latency.text = "Latency: $latency(ms)"
+                            viewBinding.latency.text = "Latency: ${latency}ms"
                         }
                     }.addOnFailureListener { _ ->
                         // Task failed with an exception
