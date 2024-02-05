@@ -1,3 +1,14 @@
 {
-  "cSpell.words": ["HWND", "Hwnds", "LPARAM", "Pids", "ROOTOWNER"]
+  "cSpell.words": [
+    "HWND",
+    "Hwnds",
+    "LPARAM",
+    "NOACTIVATE",
+    "NOOWNERZORDER",
+    "NOREDRAW",
+    "NOSIZE",
+    "NOZORDER",
+    "Pids",
+    "ROOTOWNER"
+  ]
 }
