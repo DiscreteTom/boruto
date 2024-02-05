@@ -3,7 +3,8 @@ use tokio::sync::{mpsc, watch};
 use windows::Win32::{
   Foundation::{HWND, POINT, RECT},
   UI::WindowsAndMessaging::{
-    GetAncestor, GetCursorPos, GetWindowRect, MoveWindow, WindowFromPoint, GA_ROOT,
+    GetAncestor, GetCursorPos, GetWindowRect, SetWindowPos, WindowFromPoint, GA_ROOT,
+    SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOREDRAW, SWP_NOSIZE, SWP_NOZORDER,
   },
 };
 
@@ -93,28 +94,27 @@ async fn process_action(
 
         let mut to_be_removed = Vec::new();
         for w in &state.managed_windows {
-          let mut rect = RECT::default();
-          // GetWindowRect is very fast, < 1ms
-          if let Err(e) = GetWindowRect(w.hwnd, &mut rect) {
-            eprintln!(
-              "Error getting window rect for hwnd({}), remove it. Error: {e:?}",
-              w.hwnd.0
-            );
-            to_be_removed.push(w.hwnd.0);
-            continue; // update next window
-          }
-          // TODO: check if the window is still visible
-          // TODO: check if there is any faster way to get window position
-          // currently MoveWindow will take ~10ms
-          if let Err(e) = MoveWindow(
+          // TODO(perf): check if the window will be visible after move?
+          // currently move one window will take <5ms
+          // let now = std::time::SystemTime::now();
+          if let Err(e) = SetWindowPos(
             w.hwnd,
-            // use relative offset
+            // this parameter is ignored when SWP_NOZORDER is set
+            None,
+            // apply relative position
             offset.x + w.init_x,
             offset.y + w.init_y,
             // keep original size
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            false,
+            // since we set SWP_NOSIZE, the width and height parameters are ignored
+            0,
+            0,
+            // apply these flags to improve performance:
+            // don't activate the window
+            // don't change the owner window's z-order
+            // don't redraw the window
+            // don't change the size of the window
+            // don't change the z-order of the window
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOSIZE | SWP_NOZORDER,
           ) {
             eprintln!(
               "Error setting window pos for hwnd({}), remove it. Error: {e:?}",
@@ -122,6 +122,7 @@ async fn process_action(
             );
             to_be_removed.push(w.hwnd.0);
           }
+          // println!("move window took: {}ms", now.elapsed().unwrap().as_millis());
         }
 
         // if no window failed to update, just return ok
@@ -151,6 +152,7 @@ fn add_hwnd_reply_current(
 ) -> Result<(), String> {
   let mut rect = RECT::default();
 
+  // GetWindowRect is very fast, < 1ms
   if let Err(e) = unsafe { GetWindowRect(hwnd, &mut rect) } {
     eprintln!("Error getting window rect for hwnd({}): {e:?}", hwnd.0);
     return Ok(());
