@@ -92,6 +92,8 @@ async fn process_action(
           return Ok(());
         }
 
+        // println!("{:?}", offset);
+
         let mut to_be_removed = Vec::new();
         for w in &state.managed_windows {
           // TODO(perf): check if the window will be visible after move?
