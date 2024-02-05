@@ -51,12 +51,12 @@
         />
 
     <TextView
-        android:id="@+id/fps"
+        android:id="@+id/latency"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="TextView"
         android:textColor="#FFFFFF"
-        tools:text="FPS: "
+        tools:text="Latency: "
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         />

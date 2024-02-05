@@ -147,6 +147,7 @@ class MainActivity : AppCompatActivity() {
             if (mediaImage != null) {
                 val image =
                     InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                val now = System.currentTimeMillis()
 
                 detector.process(image).addOnSuccessListener { faces ->
                         // Task completed successfully
@@ -154,6 +155,8 @@ class MainActivity : AppCompatActivity() {
                         if (faces.size > 0){
                             val ey = faces[0].headEulerAngleY
                             viewBinding.eulerY.text = "Euler Y: $ey"
+                            val latency = System.currentTimeMillis() - now
+                            viewBinding.latency.text = "Latency: $latency(ms)"
                         }
                     }.addOnFailureListener { _ ->
                         // Task failed with an exception
