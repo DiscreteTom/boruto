@@ -78,6 +78,35 @@
       <div></div>
       <pre>{{ log }}</pre>
     </div>
+
+    <!-- overlay -->
+    <div
+      v-if="capturing"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background-color: white;
+          padding: 20px;
+          border-radius: 10px;
+        "
+      >
+        <h2>Hover on a window and press C to capture</h2>
+        <h2>Press any other key to cancel</h2>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -174,9 +203,11 @@ setInterval(() => {
 }, 1000)
 
 document.addEventListener('keydown', (e) => {
-  if (!capturing.value || e.key !== 'c') return
+  if (!capturing.value) return
 
-  ws.value?.send(JSON.stringify({ type: 'capture' }))
+  // press C to capture
+  // press any other key to cancel capturing
+  if (e.key === 'c') ws.value?.send(JSON.stringify({ type: 'capture' }))
 
   // capture one window at a time
   capturing.value = false
