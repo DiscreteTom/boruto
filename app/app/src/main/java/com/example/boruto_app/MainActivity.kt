@@ -136,8 +136,7 @@ class MainActivity : AppCompatActivity() {
             // Select front camera as a default
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
-            // perf: ensure to use STRATEGY_KEEP_ONLY_LATEST for the best performance
-            val imageAnalyzer = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build().also {
+            val imageAnalyzer = ImageAnalysis.Builder().build().also {
                 it.setAnalyzer(cameraExecutor, FaceTrackingAnalyzer(viewBinding, channel))
             }
 
