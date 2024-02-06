@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
@@ -41,27 +42,18 @@ class MainActivity : AppCompatActivity() {
         viewBinding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(viewBinding.root)
 
-        // nav
-        val navView: BottomNavigationView = viewBinding.navView
-        val navController = findNavController(R.id.nav_host_fragment_activity_main)
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
-        val appBarConfiguration = AppBarConfiguration(
-            setOf(
-                R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications
-            )
-        )
-        setupActionBarWithNavController(navController, appBarConfiguration)
-        navView.setupWithNavController(navController)
-
         cameraExecutor = Executors.newSingleThreadExecutor()
         websocketExecutor = Executors.newSingleThreadExecutor()
 
         // Request camera permissions
-        if (allPermissionsGranted()) {
-            startCamera()
-        } else {
-            requestPermissions()
+        viewBinding.connectButton.setOnClickListener {
+            viewBinding.connectButton.isVisible = false
+            viewBinding.endpointInput.isVisible = false
+            if (allPermissionsGranted()) {
+                startCamera()
+            } else {
+                requestPermissions()
+            }
         }
     }
 
@@ -104,7 +96,8 @@ class MainActivity : AppCompatActivity() {
         websocketExecutor.execute {
             runBlocking {
                 try {
-                    client.webSocket(method = HttpMethod.Get, host = "192.168.1.6", port = 9002) {
+                    val parts = viewBinding.endpointInput.text.split(":")
+                    client.webSocket(method = HttpMethod.Get, host = parts[0], port = parts[1].toInt()) {
                         // debounce with history
                         val history = mutableListOf<Float>()
                         while(true) {
