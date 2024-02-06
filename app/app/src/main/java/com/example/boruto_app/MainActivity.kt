@@ -34,7 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewBinding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var websocketExecutor: ExecutorService
-    private val channel = Channel<Float>(5)
+    private val channel = Channel<Float>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,9 +193,7 @@ class MainActivity : AppCompatActivity() {
                             val latency = System.currentTimeMillis() - now
                             last = now
                             viewBinding.latency.text = "Process Latency: ${latency}ms\nFrame Interval: ${interval}ms"
-//                            if (channel.isEmpty) {
-                                channel.trySend(ey)
-//                            }
+                            channel.trySend(ey)
                         }
                     }.addOnFailureListener { _ ->
                         // Task failed with an exception
