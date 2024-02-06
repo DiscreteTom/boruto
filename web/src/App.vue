@@ -145,12 +145,12 @@ function toggle() {
 
 function add() {
   console.log('add', hwnd.value)
-  ws.value?.send(JSON.stringify({ type: 'add', hwnd: Number(hwnd.value) }))
+  ws.value?.send(JSON.stringify({ type: 'add', hwnd: Number(hwnd.value.trim()) }))
 }
 
 function remove() {
   console.log('remove', hwnd.value)
-  ws.value?.send(JSON.stringify({ type: 'remove', hwnd: Number(hwnd.value) }))
+  ws.value?.send(JSON.stringify({ type: 'remove', hwnd: Number(hwnd.value.trim()) }))
 }
 
 function removeAll() {
