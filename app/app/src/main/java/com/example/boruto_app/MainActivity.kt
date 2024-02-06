@@ -26,7 +26,6 @@ import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
-import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -64,10 +63,6 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestPermissions()
         }
-
-        // Set up the listeners for take photo and video capture buttons
-//        viewBinding.imageCaptureButton.setOnClickListener { takePhoto() }
-//        viewBinding.videoCaptureButton.setOnClickListener { captureVideo() }
     }
 
     private fun requestPermissions() {
