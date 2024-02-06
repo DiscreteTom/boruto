@@ -110,9 +110,15 @@ class MainActivity : AppCompatActivity() {
             runBlocking {
                 try {
                     client.webSocket(method = HttpMethod.Get, host = "192.168.1.6", port = 9002) {
+                        // debounce with history
+                        val history = mutableListOf<Float>()
                         while(true) {
-                            val ey = (channel.receive() * 50).toInt()
-                            send(Frame.Text("{\"type\":\"update\",\"x\":$ey,\"y\":0}"))
+                            val ey = channel.receive()
+                            history.add(ey * 50)
+                            // keep the history size to a fixed value and calculate the mean value to smooth the move
+                            while (history.size > 8) history.removeAt(0)
+                            val x = history.average().toInt()
+                            send(Frame.Text("{\"type\":\"update\",\"x\":$x,\"y\":0}"))
                         }
                     }
                 } catch (e: Exception) {
